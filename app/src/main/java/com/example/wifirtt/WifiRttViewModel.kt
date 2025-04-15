@@ -19,12 +19,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.Executors
 
-// Nuevo modelo de datos para representar un AP (Access Point) mostrado en pantalla
+// Modelo de datos para representar un AP (Access Point) mostrado en pantalla
 data class ApDisplayResult(
     val bssid: String,
+    val ssid: String,
+    val level: Int,            // Intensidad de la señal en dBm
+    val frequency: Int,        // Frecuencia en MHz
+    val capabilities: String,  // Capacidades de seguridad, etc.
     val rttCapable: Boolean,
-    val distanceMeters: Float? = null,
-    val distanceStdDev: Float? = null
+    val distanceMeters: Float? = null,   // Medición RTT (si es aplicable)
+    val distanceStdDev: Float? = null      // Error en la medición RTT
 )
 
 class WifiRttViewModel(application: Application) : AndroidViewModel(application) {
@@ -77,14 +81,15 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
 
     /**
      * startScanAndRanging() asume que los permisos ya están otorgados.
-     * Realiza el escaneo completo, crea un listado con todos los AP, y para los que soportan RTT, realiza ranging.
+     * Realiza el escaneo completo, crea un listado con toda la información de cada AP,
+     * y para los AP RTT-capables realiza ranging para actualizar la distancia.
      *
-     * @RequiresApi(Build.VERSION_CODES.P) Wi‑Fi RTT está disponible desde Android 9 (API 28)
+     * @RequiresApi(Build.VERSION_CODES.P): Wi‑Fi RTT solo está disponible desde Android 9 (API 28)
      * @RequiresPermission(anyOf = [Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION])
      */
     @RequiresApi(Build.VERSION_CODES.P)
     @RequiresPermission(anyOf = [Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION])
-    @SuppressLint("MissingPermission") // Advertencia suprimida ya que se verifican los permisos en startScanAndRangingSafe()
+    @SuppressLint("MissingPermission") // Suprimimos la advertencia ya que verificamos los permisos previamente
     private fun startScanAndRanging() {
         val context = getApplication<Application>().applicationContext
 
@@ -103,17 +108,21 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
         val scanResults = wifiManager.scanResults
         Log.d(TAG, "Scan results count: ${scanResults.size}")
 
-        // Crear listado inicial con todos los AP detectados
+        // Crear listado inicial con toda la información de cada AP
         val initialList = scanResults.map { scan ->
             ApDisplayResult(
                 bssid = scan.BSSID,
+                ssid = scan.SSID,
+                level = scan.level,
+                frequency = scan.frequency,
+                capabilities = scan.capabilities,
                 rttCapable = scan.is80211mcResponder
             )
         }
         _displayResults.value = initialList
         Log.d(TAG, "Initial display list updated with all AP")
 
-        // Filtrar AP compatibles con RTT para realizar ranging
+        // Filtrar AP RTT-capables para realizar ranging
         val rttCapableList = scanResults.filter { it.is80211mcResponder }
         Log.d(TAG, "RTT capable AP count: ${rttCapableList.size}")
 
@@ -134,12 +143,12 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
             object : RangingResultCallback() {
                 override fun onRangingFailure(code: Int) {
                     Log.e(TAG, "Ranging failed with code: $code")
-                    // No modificamos _displayResults, pues ya tenemos la lista inicial
+                    // No modificamos la lista, pues ya mostramos la información escaneada
                 }
 
                 override fun onRangingResults(resultsList: List<RangingResult>) {
-                    Log.d(TAG, "Ranging results received: ${resultsList.size}")
-                    // Actualizar el listado para los AP RTT compatibles con los resultados
+                    Log.d(TAG, "Ranging results received: ${resultsList.size} results")
+                    // Actualizar el listado para los AP RTT-capables que reciban medición
                     val updatedList = _displayResults.value.map { ap ->
                         if (ap.rttCapable) {
                             // Buscar medición para este AP por BSSID
@@ -150,10 +159,10 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
                                     distanceStdDev = r.distanceStdDevMm / 1000f
                                 )
                             } else {
-                                ap // No se recibió medición, se deja sin datos
+                                ap // Sin datos de ranging, se mantiene igual
                             }
                         } else {
-                            ap // AP no compatible, se deja igual
+                            ap // AP no RTT-capable, se muestra con la información del escaneo
                         }
                     }
                     Log.d(TAG, "Display list updated with ranging results")

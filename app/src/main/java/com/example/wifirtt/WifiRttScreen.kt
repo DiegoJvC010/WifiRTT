@@ -1,7 +1,6 @@
 package com.example.wifirtt
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
@@ -12,6 +11,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +36,7 @@ fun isLocationEnabled(context: Context): Boolean {
 }
 
 /**
- * Composable encargado de solicitar permisos necesarios para realizar escaneos de Wi-Fi RTT
+ * Composable encargado de solicitar permisos necesarios para escanear redes Wi‑Fi y Wi‑Fi RTT,
  * y verificar que la ubicación esté activada.
  */
 @Composable
@@ -44,27 +45,36 @@ fun RequestWifiPermissions(onAllGranted: @Composable () -> Unit) {
     // Lista de permisos a solicitar
     val requiredPermissions = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            listOf(Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION)
+            listOf(
+                Manifest.permission.NEARBY_WIFI_DEVICES,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
         } else {
-            listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            listOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
         }
     }
 
     var allGranted by remember { mutableStateOf(false) }
     var locationEnabled by remember { mutableStateOf(false) }
+
+    // ActivityResult para solicitar múltiples permisos
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
+        // Verificamos si todos los permisos fueron otorgados
         allGranted = permissions.values.all { it }
         Log.d(TAG_SCREEN, "Permissions granted: $allGranted")
     }
 
-    // Lanzar la solicitud de permisos
+    // Lanzamos la solicitud de permisos apenas se componga la UI
     LaunchedEffect(Unit) {
         launcher.launch(requiredPermissions.toTypedArray())
     }
 
-    // Comprobar si la ubicación del dispositivo está activada
+    // Verificar si la ubicación del dispositivo está encendida
     locationEnabled = isLocationEnabled(context)
     if (!locationEnabled) {
         Log.d(TAG_SCREEN, "Location is not enabled")
@@ -73,13 +83,14 @@ fun RequestWifiPermissions(onAllGranted: @Composable () -> Unit) {
     if (allGranted && locationEnabled) {
         onAllGranted()
     } else {
+        // Mostramos pantalla que advierte que faltan permisos o la ubicación
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (!allGranted) {
-                Text("Se requieren permisos para escaneo Wi-Fi y Wi-Fi RTT.")
+                Text("Se requieren permisos para escaneo Wi‑Fi y Wi‑Fi RTT.")
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = { launcher.launch(requiredPermissions.toTypedArray()) }) {
                     Text("Solicitar permisos")
@@ -90,7 +101,6 @@ fun RequestWifiPermissions(onAllGranted: @Composable () -> Unit) {
                 Text("Se requiere que la ubicación esté activa.")
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = {
-                    // Abrir los settings para activar la ubicación.
                     val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
                     context.startActivity(intent)
                 }) {
@@ -114,9 +124,9 @@ fun MainScreenWithPermissions(viewModel: WifiRttViewModel = viewModel()) {
 }
 
 /**
- * Pantalla principal donde se muestra la demo de Wi-Fi RTT.
- * Se muestran todos los AP detectados, indicando si son compatibles con RTT y,
- * en caso de serlo, la medición obtenida (distancia y error).
+ * Pantalla principal donde se muestra la demo de escaneo Wi‑Fi y Wi‑Fi RTT.
+ * Muestra toda la información del AP: BSSID, SSID, nivel de señal, frecuencia, capacidades, etc.
+ * Utiliza un LazyColumn para permitir scroll en caso de haber muchos AP.
  */
 @RequiresApi(Build.VERSION_CODES.P)
 @Composable
@@ -143,21 +153,28 @@ fun WifiRttScreen(viewModel: WifiRttViewModel) {
         } else {
             Text("Total de AP detectados: ${displayResults.size}")
             Spacer(modifier = Modifier.height(8.dp))
-            displayResults.forEach { ap ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text("BSSID: ${ap.bssid}")
-                        Text("Compatible con RTT: ${ap.rttCapable}")
-                        if (ap.rttCapable) {
-                            if (ap.distanceMeters != null) {
-                                Text("Distancia: ${ap.distanceMeters} m")
-                                Text("Error: ${ap.distanceStdDev} m")
-                            } else {
-                                Text("Ranging pendiente o sin resultados.")
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(displayResults) { ap ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text("BSSID: ${ap.bssid}")
+                            val ssidDisplay = if (ap.ssid.isBlank()) "<Oculto>" else ap.ssid
+                            Text("SSID: $ssidDisplay")
+                            Text("Nivel de señal: ${ap.level} dBm")
+                            Text("Frecuencia: ${ap.frequency} MHz")
+                            Text("Capacidades: ${ap.capabilities}")
+                            Text("Compatible con RTT: ${ap.rttCapable}")
+                            if (ap.rttCapable) {
+                                if (ap.distanceMeters != null) {
+                                    Text("Distancia: ${ap.distanceMeters} m")
+                                    Text("Error: ${ap.distanceStdDev} m")
+                                } else {
+                                    Text("Ranging pendiente o sin resultados.")
+                                }
                             }
                         }
                     }
