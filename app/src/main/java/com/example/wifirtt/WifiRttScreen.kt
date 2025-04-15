@@ -126,7 +126,7 @@ fun WifiRttScreen(viewModel: WifiRttViewModel) {
 
     Column(modifier = Modifier.padding(16.dp)) {
         Text(
-            text = "Demo Wi‑Fi RTT",
+            text = "Búsqueda Wi‑Fi RTT",
             style = MaterialTheme.typography.titleLarge
         )
         Spacer(modifier = Modifier.height(16.dp))
