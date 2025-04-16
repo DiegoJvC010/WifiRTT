@@ -3,6 +3,7 @@ package com.example.wifirtt
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.Context
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.net.wifi.rtt.RangingRequest
@@ -89,20 +90,29 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
      */
     @RequiresApi(Build.VERSION_CODES.P)
     @RequiresPermission(anyOf = [Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION])
-    @SuppressLint("MissingPermission") // Suprimimos la advertencia ya que verificamos los permisos previamente
+    @SuppressLint("MissingPermission") // Se suprime la advertencia ya que se verifican los permisos previamente
     private fun startScanAndRanging() {
         val context = getApplication<Application>().applicationContext
 
-        // Obtener WifiManager y WifiRttManager
-        val wifiManager = context.getSystemService(android.content.Context.WIFI_SERVICE) as WifiManager
-        val rttManager = context.getSystemService(android.content.Context.WIFI_RTT_RANGING_SERVICE) as WifiRttManager
+        // Obtener WifiManager
+        val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
+        // Verificar si el WiFi está activado
         if (!wifiManager.isWifiEnabled) {
             Log.d(TAG, "WiFi is disabled")
             _displayResults.value = emptyList()
             return
         }
         Log.d(TAG, "WiFi is enabled")
+
+        // Intentar obtener WifiRttManager de manera segura
+        val rttManager = context.getSystemService(Context.WIFI_RTT_RANGING_SERVICE) as? WifiRttManager
+        if (rttManager == null) {
+            Log.d(TAG, "El dispositivo no es compatible con Wi‑Fi RTT (rttManager es null)")
+            android.widget.Toast.makeText(context, "El dispositivo no es compatible con Wi‑Fi RTT", android.widget.Toast.LENGTH_LONG).show()
+            _displayResults.value = emptyList()
+            return
+        }
 
         // Obtener el escaneo de redes
         val scanResults = wifiManager.scanResults
@@ -145,10 +155,9 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
                     Log.e(TAG, "Ranging failed with code: $code")
                     // No modificamos la lista, pues ya mostramos la información escaneada
                 }
-
                 override fun onRangingResults(resultsList: List<RangingResult>) {
                     Log.d(TAG, "Ranging results received: ${resultsList.size} results")
-                    // Actualizar el listado para los AP RTT-capables que reciban medición
+                    // Actualizar el listado para los AP RTT-capables que reciben medición
                     val updatedList = _displayResults.value.map { ap ->
                         if (ap.rttCapable) {
                             // Buscar medición para este AP por BSSID
@@ -171,4 +180,5 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
             }
         )
     }
+
 }
