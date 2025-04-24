@@ -49,33 +49,35 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
         val context = getApplication<Application>().applicationContext
         Log.d(TAG, "startScanAndRangingSafe() called")
 
-        // Verificar permisos: para Android 13+ usamos NEARBY_WIFI_DEVICES; en versiones anteriores, ACCESS_FINE_LOCATION.
+        // Comprueba permiso NEARBY_WIFI_DEVICES en Android 13+; en versiones anteriores, lo omitimos
         val nearbyPermGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) ==
                     PackageManager.PERMISSION_GRANTED
         } else true
-
+        // Comprueba permiso ACCESS_FINE_LOCATION (requerido en Android <= 12)
         val fineLocPermGranted =
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
                     PackageManager.PERMISSION_GRANTED
-
+        // Decide si podemos hacer ranging: en Android 13+ solo NEARBY_WIFI_DEVICES; en anteriores, ACCESS_FINE_LOCATION
         val canDoRanging = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             nearbyPermGranted
         } else {
             fineLocPermGranted
         }
-
+        // Si no tenemos permisos, vaciamos resultados y salimos
         if (!canDoRanging) {
-            Log.d(TAG, "Permissions not granted, cannot perform scan and ranging")
+            Log.d(TAG, "Permisos denegados, no se pudo escanear ni medir distancia")
             _displayResults.value = emptyList()
             return
         }
 
         try {
-            Log.d(TAG, "Permissions OK, starting scan and ranging")
+            // Permisos OK: iniciamos el escaneo y ranging
+            Log.d(TAG, "Permisos concedidos, iniciando el escaneo y medición")
             startScanAndRanging()
         } catch (se: SecurityException) {
-            Log.e(TAG, "SecurityException in startScanAndRanging: ${se.message}")
+            // Capturamos SecurityException y vaciamos la lista
+            Log.e(TAG, "Excepción de seguridad al medir RTT: ${se.message}")
             _displayResults.value = emptyList()
         }
     }
@@ -86,7 +88,7 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
      * y para los AP RTT-capables realiza ranging para actualizar la distancia.
      *
      * @RequiresApi(Build.VERSION_CODES.P): Wi‑Fi RTT solo está disponible desde Android 9 (API 28)
-     * @RequiresPermission(anyOf = [Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION])
+     *
      */
     @RequiresApi(Build.VERSION_CODES.P)
     @RequiresPermission(anyOf = [Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.ACCESS_FINE_LOCATION])
@@ -99,11 +101,11 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
 
         // Verificar si el WiFi está activado
         if (!wifiManager.isWifiEnabled) {
-            Log.d(TAG, "WiFi is disabled")
+            Log.d(TAG, "WiFi esta desactivado")
             _displayResults.value = emptyList()
             return
         }
-        Log.d(TAG, "WiFi is enabled")
+        Log.d(TAG, "WiFi esta activado")
 
         // Intentar obtener WifiRttManager de manera segura
         val rttManager = context.getSystemService(Context.WIFI_RTT_RANGING_SERVICE) as? WifiRttManager
@@ -130,14 +132,14 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
             )
         }
         _displayResults.value = initialList
-        Log.d(TAG, "Initial display list updated with all AP")
+        Log.d(TAG, "Lista inicial de puntos de acceso actualizada con toda la información")
 
         // Filtrar AP RTT-capables para realizar ranging
         val rttCapableList = scanResults.filter { it.is80211mcResponder }
-        Log.d(TAG, "RTT capable AP count: ${rttCapableList.size}")
+        Log.d(TAG, "Número de puntos de acceso compatibles con RTT: ${rttCapableList.size}")
 
         if (rttCapableList.isEmpty()) {
-            Log.d(TAG, "No RTT capable access points found")
+            Log.d(TAG, "No se encontraron puntos de acceso compatibles con RTT")
             return
         }
 
@@ -147,16 +149,24 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
         }.build()
         Log.d(TAG, "Ranging request built, starting ranging...")
 
+
+
+        /**
+         * Lanza la solicitud de ranging para los puntos de acceso añadidos.
+         * La operación es asíncrona: si falla, se invoca onRangingFailure;
+         * si tiene éxito, onRangingResults procesa y actualiza las distancias.
+         */
+
         rttManager.startRanging(
             request,
             Executors.newSingleThreadExecutor(),
             object : RangingResultCallback() {
                 override fun onRangingFailure(code: Int) {
-                    Log.e(TAG, "Ranging failed with code: $code")
+                    Log.e(TAG, "Error al medir distancia (RTT): código $code")
                     // No modificamos la lista, pues ya mostramos la información escaneada
                 }
                 override fun onRangingResults(resultsList: List<RangingResult>) {
-                    Log.d(TAG, "Ranging results received: ${resultsList.size} results")
+                    Log.d(TAG, "Resultados de RTT recibidos: ${resultsList.size} puntos de acceso medidos")
                     // Actualizar el listado para los AP RTT-capables que reciben medición
                     val updatedList = _displayResults.value.map { ap ->
                         if (ap.rttCapable) {
@@ -174,7 +184,7 @@ class WifiRttViewModel(application: Application) : AndroidViewModel(application)
                             ap // AP no RTT-capable, se muestra con la información del escaneo
                         }
                     }
-                    Log.d(TAG, "Display list updated with ranging results")
+                    Log.d(TAG, "Lista de puntos de acceso actualizada con resultados de distancia")
                     _displayResults.value = updatedList
                 }
             }

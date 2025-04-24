@@ -46,18 +46,21 @@ fun RequestWifiPermissions(onAllGranted: @Composable () -> Unit) {
     val requiredPermissions = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             listOf(
-                Manifest.permission.NEARBY_WIFI_DEVICES,
-                Manifest.permission.ACCESS_FINE_LOCATION
+                Manifest.permission.NEARBY_WIFI_DEVICES, // Permiso para buscar dispositivos Wi‑Fi cercanos en Android 13+
+
+                Manifest.permission.ACCESS_FINE_LOCATION // Permiso para obtener ubicación precisa necesaria para escaneo Wi‑Fi
             )
         } else {
             listOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
+
                 Manifest.permission.ACCESS_COARSE_LOCATION
             )
         }
     }
-
+    // Estado que indica si todos los permisos fueron concedidos por el usuario
     var allGranted by remember { mutableStateOf(false) }
+    // Estado que indica si el servicio de ubicación está activado en el dispositivo
     var locationEnabled by remember { mutableStateOf(false) }
 
     // ActivityResult para solicitar múltiples permisos
@@ -77,7 +80,7 @@ fun RequestWifiPermissions(onAllGranted: @Composable () -> Unit) {
     // Verificar si la ubicación del dispositivo está encendida
     locationEnabled = isLocationEnabled(context)
     if (!locationEnabled) {
-        Log.d(TAG_SCREEN, "Location is not enabled")
+        Log.d(TAG_SCREEN, "La localizacion esta desactivada")
     }
 
     if (allGranted && locationEnabled) {
@@ -117,7 +120,7 @@ fun RequestWifiPermissions(onAllGranted: @Composable () -> Unit) {
 @RequiresApi(Build.VERSION_CODES.P)
 @Composable
 fun MainScreenWithPermissions(viewModel: WifiRttViewModel = viewModel()) {
-    Log.d(TAG_SCREEN, "MainScreenWithPermissions rendered")
+    Log.d(TAG_SCREEN, "antalla principal con permisos")
     RequestWifiPermissions {
         WifiRttScreen(viewModel)
     }
@@ -131,7 +134,7 @@ fun MainScreenWithPermissions(viewModel: WifiRttViewModel = viewModel()) {
 @RequiresApi(Build.VERSION_CODES.P)
 @Composable
 fun WifiRttScreen(viewModel: WifiRttViewModel) {
-    Log.d(TAG_SCREEN, "WifiRttScreen rendered")
+    Log.d(TAG_SCREEN, "WifiRttScreen")
     val displayResults by viewModel.displayResults.collectAsState()
 
     Column(modifier = Modifier.padding(16.dp)) {
